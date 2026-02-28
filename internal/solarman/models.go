@@ -1,0 +1,84 @@
+package solarman
+
+// ==================== Authentication ====================
+
+// TokenRequest คือ body ที่ส่งไปขอ token
+// ต้องส่ง email + password (SHA256) + appSecret
+type TokenRequest struct {
+	AppSecret string `json:"appSecret"`       // App Secret (plain text)
+	Email     string `json:"email,omitempty"` // Email ที่ใช้ login
+	Password  string `json:"password"`        // SHA256 hash ของ password
+}
+
+// TokenResponse คือ response ที่ได้จาก API
+type TokenResponse struct {
+	Code        string `json:"code"`         // "0" = สำเร็จ
+	Msg         string `json:"msg"`          // ข้อความ
+	AccessToken string `json:"access_token"` // token สำหรับเรียก API อื่น
+	TokenType   string `json:"token_type"`   // "bearer"
+	ExpiresIn   string `json:"expires_in"`   // อายุ token (วินาที) - API ส่งมาเป็น string
+	Success     bool   `json:"success"`
+}
+
+// ==================== Station (โรงไฟฟ้า) ====================
+
+type StationListRequest struct {
+	Page int `json:"page"`
+	Size int `json:"size"`
+}
+
+type Station struct {
+	ID             int64   `json:"id"`
+	Name           string  `json:"name"`
+	LocationLat    float64 `json:"locationLat"`
+	LocationLng    float64 `json:"locationLng"`
+	InstalledPower float64 `json:"installedPower"`
+	CreatedDate    int64   `json:"createdDate"`
+}
+
+type StationListResponse struct {
+	Code        string    `json:"code"`
+	Msg         string    `json:"msg"`
+	Success     bool      `json:"success"`
+	Total       int       `json:"total"`
+	StationList []Station `json:"stationList"`
+}
+
+// ==================== Device (อุปกรณ์) ====================
+
+type Device struct {
+	DeviceSn   string `json:"deviceSn"`
+	DeviceType string `json:"deviceType"`
+	Status     int    `json:"status"`
+	StationID  int64  `json:"stationId"`
+}
+
+type DeviceListResponse struct {
+	Code            string   `json:"code"`
+	Msg             string   `json:"msg"`
+	Success         bool     `json:"success"`
+	DeviceListItems []Device `json:"deviceListItems"`
+}
+
+// ==================== Real-time Data ====================
+
+type DataAttribute struct {
+	Key   string `json:"key"`
+	Name  string `json:"name"`
+	Value string `json:"value"`
+	Unit  string `json:"unit"`
+}
+
+type RealtimeDataRequest struct {
+	DeviceSn string `json:"deviceSn"`
+}
+
+type RealtimeDataResponse struct {
+	Code           string          `json:"code"`
+	Msg            string          `json:"msg"`
+	Success        bool            `json:"success"`
+	DeviceSn       string          `json:"deviceSn"`
+	DeviceState    int             `json:"deviceState"`
+	CollectionTime int64           `json:"collectionTime"`
+	DataList       []DataAttribute `json:"dataList"`
+}
