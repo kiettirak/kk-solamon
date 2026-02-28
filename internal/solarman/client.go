@@ -88,7 +88,19 @@ func (c *Client) GetStationList(page, size int) (*StationListResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	// API ส่ง code=null เมื่อสำเร็จ เช็คจาก success แทน
+	if !result.Success && result.Code != "" && result.Code != "0" {
+		return nil, fmt.Errorf("API error: code=%s msg=%s", result.Code, result.Msg)
+	}
+	return &result, nil
+}
+
+// GetDeviceList ดึงรายการอุปกรณ์ของโรงไฟฟ้า
+func (c *Client) GetDeviceList(stationID int64) (*DeviceListResponse, error) {
+	var result DeviceListResponse
+	err := c.post(EndpointDeviceList, DeviceListRequest{StationID: stationID, Page: 1, Size: 50}, &result)
+	if err != nil {
+		return nil, err
+	}
 	if !result.Success && result.Code != "" && result.Code != "0" {
 		return nil, fmt.Errorf("API error: code=%s msg=%s", result.Code, result.Msg)
 	}

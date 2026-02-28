@@ -28,12 +28,16 @@ type StationListRequest struct {
 }
 
 type Station struct {
-	ID             int64   `json:"id"`
-	Name           string  `json:"name"`
-	LocationLat    float64 `json:"locationLat"`
-	LocationLng    float64 `json:"locationLng"`
-	InstalledPower float64 `json:"installedPower"`
-	CreatedDate    int64   `json:"createdDate"`
+	ID               int64   `json:"id"`
+	Name             string  `json:"name"`
+	LocationLat      float64 `json:"locationLat"`
+	LocationLng      float64 `json:"locationLng"`
+	InstalledCapacity float64 `json:"installedCapacity"` // กำลังติดตั้ง (W)
+	GenerationPower  float64 `json:"generationPower"`   // กำลังผลิตขณะนี้ (W)
+	BatterySoc       float64 `json:"batterySoc"`        // แบตเตอรี่ (%)
+	NetworkStatus    string  `json:"networkStatus"`     // NORMAL, ALARM
+	CreatedDate      int64   `json:"createdDate"`
+	LastUpdateTime   int64   `json:"lastUpdateTime"`
 }
 
 type StationListResponse struct {
@@ -46,10 +50,16 @@ type StationListResponse struct {
 
 // ==================== Device (อุปกรณ์) ====================
 
+type DeviceListRequest struct {
+	StationID int64 `json:"stationId"`
+	Page      int   `json:"page"`
+	Size      int   `json:"size"`
+}
+
 type Device struct {
 	DeviceSn   string `json:"deviceSn"`
 	DeviceType string `json:"deviceType"`
-	Status     int    `json:"status"`
+	Status     int    `json:"deviceState"` // 1=online, 0=offline
 	StationID  int64  `json:"stationId"`
 }
 

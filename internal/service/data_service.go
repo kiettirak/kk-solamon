@@ -7,27 +7,26 @@ import (
 	"os"
 	"path/filepath"
 	"solarman-go-client/internal/solarman"
+	"solarman-go-client/internal/store"
 	"time"
 )
 
-// DataService จัดการเรียก API และบันทึกข้อมูล
 type DataService struct {
-	client    *solarman.Client
-	outputDir string
+	client      *solarman.Client
+	influx      *store.InfluxStore
+	outputDir   string
 }
 
-// NewDataService สร้าง DataService ใหม่
-func NewDataService(client *solarman.Client, outputDir string) *DataService {
+func NewDataService(client *solarman.Client, influx *store.InfluxStore, outputDir string) *DataService {
 	return &DataService{
 		client:    client,
+		influx:    influx,
 		outputDir: outputDir,
 	}
 }
 
-// FetchAndSaveAll ดึงข้อมูลทั้งหมดแล้วบันทึกเป็น JSON
-func (ds *DataService) FetchAndSaveAll() error {
-	// สร้างโฟลเดอร์ output ถ้ายังไม่มี
-	// os.MkdirAll เหมือน mkdir -p
+// FetchAndStore ดึงข้อมูลทั้งหมด บันทึกลง InfluxDB + JSON
+func (ds *DataService) FetchAndStore() error {
 	if err := os.MkdirAll(ds.outputDir, 0755); err != nil {
 		return fmt.Errorf("สร้างโฟลเดอร์ output ไม่สำเร็จ: %w", err)
 	}
@@ -38,43 +37,63 @@ func (ds *DataService) FetchAndSaveAll() error {
 	if err != nil {
 		return fmt.Errorf("ดึงรายการโรงไฟฟ้าไม่สำเร็จ: %w", err)
 	}
-	log.Printf("[Service] พบโรงไฟฟ้าทั้งหมด %d แห่ง", len(stations.StationList))
+	log.Printf("[Service] พบโรงไฟฟ้า %d แห่ง", len(stations.StationList))
 
-	// บันทึก stations เป็น JSON file
 	if err := ds.saveJSON("stations.json", stations); err != nil {
-		return err
+		log.Printf("[Service] เตือน: บันทึก JSON ไม่สำเร็จ: %v", err)
 	}
 
-	// สรุปให้ดูใน console
-	fmt.Printf("\n========== สรุปโรงไฟฟ้า ==========\n")
+	fmt.Printf("\n====== สรุปโรงไฟฟ้า ======\n")
 	for i, s := range stations.StationList {
-		fmt.Printf("%d. [ID: %d] %s (%.2f kW)\n", i+1, s.ID, s.Name, s.InstalledPower)
-	}
-	fmt.Println("================================\n")
+		fmt.Printf("%d. [ID: %d] %s | Power: %.0fW | Battery: %.1f%%\n",
+			i+1, s.ID, s.Name, s.GenerationPower, s.BatterySoc)
 
+		// เขียน station data ลง InfluxDB
+		if ds.influx != nil {
+			if err := ds.influx.WriteStation(s); err != nil {
+				log.Printf("[Service] เตือน: เขียน station ไม่สำเร็จ: %v", err)
+			}
+		}
+
+		// ---- Step 2: ดึงรายการอุปกรณ์ของแต่ละโรงไฟฟ้า ----
+		devices, err := ds.client.GetDeviceList(s.ID)
+		if err != nil {
+			log.Printf("[Service] เตือน: ดึง device list ไม่สำเร็จ: %v", err)
+			continue
+		}
+
+		for _, dev := range devices.DeviceListItems {
+			// ---- Step 3: ดึงข้อมูล real-time ของแต่ละอุปกรณ์ ----
+			realtimeResp, err := ds.client.GetDeviceRealtime(dev.DeviceSn)
+			if err != nil {
+				log.Printf("[Service] เตือน: ดึง realtime %s ไม่สำเร็จ: %v", dev.DeviceSn, err)
+				continue
+			}
+
+			// เขียน device data ลง InfluxDB
+			if ds.influx != nil {
+				if err := ds.influx.WriteDeviceData(s.ID, realtimeResp); err != nil {
+					log.Printf("[Service] เตือน: เขียน device data ไม่สำเร็จ: %v", err)
+				}
+			}
+		}
+	}
+	fmt.Println("========================")
 	return nil
 }
 
-// saveJSON บันทึกข้อมูลเป็น JSON file
 func (ds *DataService) saveJSON(filename string, data any) error {
-	// สร้าง path เต็ม เช่น ./output/stations.json
-	filePath := filepath.Join(ds.outputDir, filename)
-
-	// json.MarshalIndent ทำให้ JSON อ่านง่าย (pretty print)
 	jsonBytes, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return fmt.Errorf("แปลงเป็น JSON ไม่สำเร็จ: %w", err)
 	}
-
-	// os.WriteFile เขียนไฟล์ ชื่อไฟล์ timestamp เพื่อไม่ทับกัน
 	timestampedFile := filepath.Join(
 		ds.outputDir,
 		fmt.Sprintf("%s_%s", time.Now().Format("20060102_150405"), filename),
 	)
 	if err := os.WriteFile(timestampedFile, jsonBytes, 0644); err != nil {
-		return fmt.Errorf("บันทึกไฟล์ %s ไม่สำเร็จ: %w", filePath, err)
+		return fmt.Errorf("บันทึกไฟล์ ไม่สำเร็จ: %w", err)
 	}
-
 	log.Printf("[Service] บันทึกไฟล์แล้ว: %s", timestampedFile)
 	return nil
 }
