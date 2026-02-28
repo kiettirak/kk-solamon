@@ -1,0 +1,12 @@
+# Environment variables (ห้าม commit ไฟล์นี้)
+.env
+
+# Build output
+/bin/
+/dist/
+
+# Go
+*.exe
+*.test
+*.out
+output/
