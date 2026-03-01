@@ -145,6 +145,19 @@ func (c *Client) fetchPM(params url.Values) (map[string][2]float64, error) {
 	return pmMap, nil
 }
 
+// FetchPMRange ดึง PM2.5/PM10 จาก Air Quality API สำหรับช่วงวันที่กำหนด
+// คืน map[observedAt] → [pm25, pm10]  (key format: "2023-05-23 08:00:00")
+func (c *Client) FetchPMRange(startDate, endDate string) (map[string][2]float64, error) {
+	params := url.Values{
+		"latitude":   {fmt.Sprintf("%.4f", c.Latitude)},
+		"longitude":  {fmt.Sprintf("%.4f", c.Longitude)},
+		"timezone":   {"Asia/Bangkok"},
+		"start_date": {startDate},
+		"end_date":   {endDate},
+	}
+	return c.fetchPM(params)
+}
+
 func (c *Client) fetch(rawURL string) ([]HourlyWeather, error) {
 	resp, err := c.httpClient.Get(rawURL)
 	if err != nil {

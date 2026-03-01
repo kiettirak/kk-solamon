@@ -15,6 +15,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/solarman-client ./cmd/solarman-client
 RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/weather-collector ./cmd/weather-collector
 RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/backfill ./cmd/backfill
+RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/pm-backfill ./cmd/pm-backfill
 
 # ---- Stage 2: Runtime ----
 # ใช้ alpine เล็กๆ — ไม่มี Go toolchain อีกต่อไป
@@ -29,6 +30,7 @@ WORKDIR /app
 COPY --from=builder /bin/solarman-client .
 COPY --from=builder /bin/weather-collector .
 COPY --from=builder /bin/backfill .
+COPY --from=builder /bin/pm-backfill .
 
 # output directory สำหรับ JSON files
 RUN mkdir -p ./output

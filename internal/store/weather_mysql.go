@@ -122,6 +122,70 @@ ON DUPLICATE KEY UPDATE
 	return count, err
 }
 
+// UpdatePMBatch อัปเดต pm25_ugm3 / pm10_ugm3 สำหรับ rows ที่มีอยู่แล้ว
+// pmMap: key = "2023-05-23 08:00:00", value = [pm25, pm10]
+// คืน จำนวน rows ที่ UPDATE สำเร็จ
+func (s *MySQLStore) UpdatePMBatch(stationID int64, pmMap map[string][2]float64) (int, error) {
+	if len(pmMap) == 0 {
+		return 0, nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("pm batch tx: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	stmt, err := tx.Prepare(`
+UPDATE weather_history
+   SET pm25_ugm3 = ?, pm10_ugm3 = ?
+ WHERE station_id = ? AND observed_at = ?`)
+	if err != nil {
+		return 0, fmt.Errorf("pm batch prepare: %w", err)
+	}
+	defer stmt.Close()
+
+	count := 0
+	for ts, pm := range pmMap {
+		res, err2 := stmt.Exec(pm[0], pm[1], stationID, ts)
+		if err2 != nil {
+			err = err2
+			return count, fmt.Errorf("pm update %s: %w", ts, err2)
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			count++
+		}
+	}
+
+	err = tx.Commit()
+	return count, err
+}
+
+// PMNullRange คืน earliest/latest DATE ที่ pm25_ugm3 หรือ pm10_ugm3 ยังเป็น NULL
+// ใช้สำหรับ pm-backfill tool
+func (s *MySQLStore) PMNullRange(stationID int64) (earliest, latest string, err error) {
+	var e, l sql.NullString
+	err = s.db.QueryRow(`
+		SELECT DATE_FORMAT(MIN(observed_at), '%Y-%m-%d'),
+		       DATE_FORMAT(MAX(observed_at), '%Y-%m-%d')
+		  FROM weather_history
+		 WHERE station_id = ?
+		   AND (pm25_ugm3 IS NULL OR pm10_ugm3 IS NULL)`,
+		stationID,
+	).Scan(&e, &l)
+	if err != nil {
+		return "", "", err
+	}
+	if !e.Valid {
+		return "", "", nil
+	}
+	return e.String, l.String, nil
+}
+
 // LatestWeatherDate คืน date ล่าสุดที่มีข้อมูล weather (สำหรับ backfill gap detection)
 // ใช้ DATE_FORMAT เพื่อบังคับให้ MySQL ส่งกลับเป็น string "YYYY-MM-DD"
 // (หลีกเลี่ยงปัญหา parseTime=true ใน DSN ที่ทำให้ Go แปลง DATE เป็น time.Time)
