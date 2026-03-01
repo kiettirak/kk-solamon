@@ -6,6 +6,9 @@
 /bin/
 /dist/
 
+# Logs
+*.log
+
 # Go
 *.exe
 *.test
