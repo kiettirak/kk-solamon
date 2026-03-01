@@ -334,3 +334,59 @@ func TestFetchAndStore_OutputDirError(t *testing.T) {
 		t.Error("expected error when outputDir is a regular file, got nil")
 	}
 }
+
+func TestSetAPIOpts_SkipStationList(t *testing.T) {
+	// FETCH_STATION_LIST=false → ไม่เรียก GetStationList
+	// ใช้ stationID ที่กำหนดแทน, ไม่ crash
+	client := &mockClient{
+		// stationsErr ยืนยันว่าถ้าโค้ดเรียก /station/v1.0/list จะ error
+		// SetAPIOpts(false,...) ต้องทำให้ผ่านโดยไม่เรียก
+		stationsErr: fmt.Errorf("should not call GetStationList"),
+		devices:     &solarman.DeviceListResponse{Success: true},
+	}
+	store := &mockStore{}
+	tmpDir := t.TempDir()
+
+	ds := service.NewDataService(client, store, nil, tmpDir).
+		SetAPIOpts(false, true, 999)
+	err := ds.FetchAndStore()
+
+	// ไม่ควร error (ไม่ได้เรียก API ที่จะ fail)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// WriteStation ถูกเรียก 1 ครั้งจาก synthetic station ID=999
+	if store.stationCalls != 1 {
+		t.Errorf("expected 1 WriteStation call, got %d", store.stationCalls)
+	}
+}
+
+func TestSetAPIOpts_SkipDeviceList(t *testing.T) {
+	// FETCH_DEVICE_LIST=false → ไม่เรียก GetDeviceList และ GetDeviceRealtime
+	client := &mockClient{
+		stations: &solarman.StationListResponse{
+			Success: true,
+			StationList: []solarman.Station{{ID: 1, Name: "Test"}},
+		},
+		// devicesErr จะทำให้ fail ถ้าเรียก — ยืนยันว่าไม่เรียก
+		devicesErr: fmt.Errorf("should not be called"),
+	}
+	store := &mockStore{}
+	tmpDir := t.TempDir()
+
+	ds := service.NewDataService(client, store, nil, tmpDir).
+		SetAPIOpts(true, false, 0)
+	err := ds.FetchAndStore()
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// station ถูกเขียน แต่ device ไม่ถูกเขียนเพราะ skip
+	if store.stationCalls != 1 {
+		t.Errorf("expected 1 station write, got %d", store.stationCalls)
+	}
+	if store.deviceCalls != 0 {
+		t.Errorf("expected 0 device writes, got %d", store.deviceCalls)
+	}
+}
+

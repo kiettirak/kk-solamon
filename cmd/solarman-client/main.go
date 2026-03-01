@@ -46,7 +46,8 @@ func main() {
 		}
 	}
 
-	dataService := service.NewDataService(client, stationStore, apiLogger, cfg.OutputDir)
+	dataService := service.NewDataService(client, stationStore, apiLogger, cfg.OutputDir).
+		SetAPIOpts(cfg.FetchStationList, cfg.FetchDeviceList, cfg.StationID)
 
 	// วนรอบแรกทันที แล้ววนซ้ำตาม interval
 	for {

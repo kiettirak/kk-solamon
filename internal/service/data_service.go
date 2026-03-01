@@ -18,17 +18,35 @@ type DataService struct {
 	store     port.StationStore   // interface — mock ได้ (InfluxDB implement นี้)
 	logger    port.APILogger      // interface — mock ได้ (MySQL implement นี้)
 	outputDir string
+
+	// API call control (default: true = ดึงทั้งหมด)
+	fetchStationList bool  // false = ข้าม /station/v1.0/list ใช้ stationID แทน
+	fetchDeviceList  bool  // false = ข้าม /station/v1.0/device/list + GetDeviceRealtime
+	stationID        int64 // ใช้เมื่อ fetchStationList=false
 }
 
 // NewDataService สร้าง DataService โดยรับ interface แทน concrete type
 // ถ้าไม่มี store หรือ logger ให้ส่ง nil — จะข้ามการบันทึกส่วนนั้น
 func NewDataService(client port.SolarmanClient, store port.StationStore, logger port.APILogger, outputDir string) *DataService {
 	return &DataService{
-		client:    client,
-		store:     store,
-		logger:    logger,
-		outputDir: outputDir,
+		client:          client,
+		store:           store,
+		logger:          logger,
+		outputDir:       outputDir,
+		fetchStationList: true,
+		fetchDeviceList:  true,
 	}
+}
+
+// SetAPIOpts ตั้งค่าว่าจะเรียก API ไหนบ้าง
+//
+//		fetchStationList=false: ข้าม /station/v1.0/list, ใช้ stationID แทน
+//		fetchDeviceList=false:  ข้าม /station/v1.0/device/list และ GetDeviceRealtime
+func (ds *DataService) SetAPIOpts(fetchStationList, fetchDeviceList bool, stationID int64) *DataService {
+	ds.fetchStationList = fetchStationList
+	ds.fetchDeviceList = fetchDeviceList
+	ds.stationID = stationID
+	return ds
 }
 
 // FetchAndStore ดึงและบันทึกข้อมูลทั้งหมด 1 รอบ
@@ -37,9 +55,21 @@ func (ds *DataService) FetchAndStore() error {
 		return fmt.Errorf("สร้างโฟลเดอร์ output ไม่สำเร็จ: %w", err)
 	}
 
-	stations, err := ds.fetchStations()
-	if err != nil {
-		return err
+	var stations *solarman.StationListResponse
+	var err error
+
+	if ds.fetchStationList {
+		stations, err = ds.fetchStations()
+		if err != nil {
+			return err
+		}
+	} else {
+		// ข้ามเรียก API — สร้าง station จาก stationID ที่ตั้งไว้
+		log.Printf("[Service] FETCH_STATION_LIST=false — ใช้ station_id=%d", ds.stationID)
+		stations = &solarman.StationListResponse{
+			Success: true,
+			StationList: []solarman.Station{{ID: ds.stationID}},
+		}
 	}
 
 	fmt.Printf("\n====== สรุปโรงไฟฟ้า ======\n")
@@ -76,6 +106,11 @@ func (ds *DataService) processStation(s solarman.Station) {
 		if err := ds.store.WriteStation(s); err != nil {
 			log.Printf("[Service] เตือน: เขียน station ไม่สำเร็จ: %v", err)
 		}
+	}
+
+	if !ds.fetchDeviceList {
+		log.Printf("[Service] FETCH_DEVICE_LIST=false — ข้าม device list/realtime สำหรับ station %d", s.ID)
+		return
 	}
 
 	// ดึงรายการอุปกรณ์

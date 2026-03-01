@@ -35,6 +35,11 @@ type Config struct {
 	WeatherLon       float64 // longitude (เช่น 100.5018)
 	WeatherBackfill  bool    // true = backfill ย้อนหลังอัตโนมัติถ้ายังไม่มีข้อมูล
 	WeatherStartDate string  // วันที่เริ่ม backfill (YYYY-MM-DD)
+
+	// Solarman API call control
+	FetchStationList bool  // false = ข้าม /station/v1.0/list ใช้ STATION_ID แทน
+	FetchDeviceList  bool  // false = ข้าม /station/v1.0/device/list + GetDeviceRealtime
+	StationID        int64 // ใช้เมื่อ FetchStationList=false
 }
 
 func LoadConfig() (*Config, error) {
@@ -89,6 +94,14 @@ func LoadConfig() (*Config, error) {
 	cfg.WeatherStartDate = os.Getenv("WEATHER_START_DATE")
 	if cfg.WeatherStartDate == "" {
 		cfg.WeatherStartDate = "2023-05-23" // วันที่ติดตั้งโซลาร์
+	}
+
+	// Solarman API call control — default: ดึงทั้งหมด
+	cfg.FetchStationList = os.Getenv("FETCH_STATION_LIST") != "false"
+	cfg.FetchDeviceList = os.Getenv("FETCH_DEVICE_LIST") != "false"
+	cfg.StationID = 0
+	if v := os.Getenv("STATION_ID"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.StationID)
 	}
 
 	cfg.PollMinutes = 5 // ดึงข้อมูลทุก 5 นาที (default)
