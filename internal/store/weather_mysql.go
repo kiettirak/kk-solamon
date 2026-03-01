@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"pvmon/internal/weather"
+	"kk-solamon/internal/weather"
 )
 
 // WriteWeatherPoint เขียน 1 ชั่วโมง weather เข้า MySQL (UPSERT)

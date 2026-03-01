@@ -6,8 +6,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"pvmon/internal/port"
-	"pvmon/internal/solarman"
+	"kk-solamon/internal/port"
+	"kk-solamon/internal/solarman"
 	"time"
 )
 

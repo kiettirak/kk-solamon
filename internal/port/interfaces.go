@@ -3,8 +3,8 @@
 package port
 
 import (
-	"pvmon/internal/solarman"
-	weatherpkg "pvmon/internal/weather"
+	"kk-solamon/internal/solarman"
+	weatherpkg "kk-solamon/internal/weather"
 )
 
 // SolarmanClient interface สำหรับ Solarman API

@@ -2,11 +2,11 @@ package main
 
 import (
 	"log"
-	"pvmon/internal/config"
-	"pvmon/internal/port"
-	"pvmon/internal/service"
-	"pvmon/internal/solarman"
-	"pvmon/internal/store"
+	"kk-solamon/internal/config"
+	"kk-solamon/internal/port"
+	"kk-solamon/internal/service"
+	"kk-solamon/internal/solarman"
+	"kk-solamon/internal/store"
 	"time"
 )
 

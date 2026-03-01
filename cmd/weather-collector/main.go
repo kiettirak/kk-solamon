@@ -23,9 +23,9 @@ import (
 	"os"
 	"time"
 
-	"pvmon/internal/config"
-	"pvmon/internal/store"
-	"pvmon/internal/weather"
+	"kk-solamon/internal/config"
+	"kk-solamon/internal/store"
+	"kk-solamon/internal/weather"
 )
 
 // stationID สำหรับ KK-Home สถานีเสกา, บึงกาน (กำหนดตรง ๆ หรืออ่านจาก env)

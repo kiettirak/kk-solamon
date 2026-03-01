@@ -1,4 +1,4 @@
-module pvmon
+module kk-solamon
 
 go 1.21.0
 

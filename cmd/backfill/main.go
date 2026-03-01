@@ -6,9 +6,9 @@ import (
 	"log"
 	"time"
 
-	"pvmon/internal/config"
-	"pvmon/internal/solarman"
-	"pvmon/internal/store"
+	"kk-solamon/internal/config"
+	"kk-solamon/internal/solarman"
+	"kk-solamon/internal/store"
 )
 
 func main() {

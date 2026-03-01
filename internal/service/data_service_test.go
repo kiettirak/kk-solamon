@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	"pvmon/internal/solarman"
-	"pvmon/internal/service"
+	"kk-solamon/internal/solarman"
+	"kk-solamon/internal/service"
 )
 
 // ==================== Mock: SolarmanClient ====================
