@@ -3,10 +3,11 @@ package service_test
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
-	"kk-solamon/internal/solarman"
 	"kk-solamon/internal/service"
+	"kk-solamon/internal/solarman"
 )
 
 // ==================== Mock: SolarmanClient ====================
@@ -36,9 +37,10 @@ func (m *mockClient) GetStationHistory(appID string, stationID int64, startDate,
 // ==================== Mock: StationStore ====================
 
 type mockStore struct {
-	stationCalls int
-	historyCalls int
-	deviceCalls  int
+	stationCalls    int
+	historyCalls    int
+	deviceCalls     int
+	writeDeviceErr  error
 }
 
 func (m *mockStore) WriteStation(s solarman.Station) error {
@@ -51,7 +53,7 @@ func (m *mockStore) WriteStationHistoryPoint(stationID int64, name string, pt so
 }
 func (m *mockStore) WriteDeviceData(stationID int64, data *solarman.RealtimeDataResponse) error {
 	m.deviceCalls++
-	return nil
+	return m.writeDeviceErr
 }
 
 // ==================== Mock: APILogger ====================
@@ -234,5 +236,101 @@ func TestFetchAndStore_SavesJSONFile(t *testing.T) {
 	}
 	if len(entries) == 0 {
 		t.Error("expected JSON file in output dir, got 0 files")
+	}
+}
+
+func TestFetchAndStore_RealtimeError(t *testing.T) {
+	// processDevice: GetDeviceRealtime คืน error → early return, ไม่ WriteDeviceData
+	client := &mockClient{
+		stations: &solarman.StationListResponse{
+			Success: true,
+			StationList: []solarman.Station{
+				{ID: 1, Name: "Station1"},
+			},
+		},
+		devices: &solarman.DeviceListResponse{
+			Success: true,
+			DeviceListItems: []solarman.Device{
+				{DeviceSn: "SN-001"},
+			},
+		},
+		realtimeErr: fmt.Errorf("api timeout"),
+	}
+	store := &mockStore{}
+	logger := &mockLogger{}
+	tmpDir := t.TempDir()
+
+	ds := service.NewDataService(client, store, logger, tmpDir)
+	err := ds.FetchAndStore()
+
+	// FetchAndStore ไม่ propagate error จาก processDevice
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// ต้องไม่มีการ WriteDeviceData (เพราะ realtime fail)
+	if store.deviceCalls != 0 {
+		t.Errorf("expected 0 device writes, got %d", store.deviceCalls)
+	}
+	// ต้องมี log error สำหรับ realtime endpoint
+	found := false
+	for _, l := range logger.logs {
+		if l.Endpoint == "/device/v1.0/currentData" && l.Status == "error" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected error log for /device/v1.0/currentData")
+	}
+}
+
+func TestFetchAndStore_WriteDeviceDataError(t *testing.T) {
+	// processDevice: WriteDeviceData คืน error → log warning, ไม่ panic, FetchAndStore คืน nil
+	client := &mockClient{
+		stations: &solarman.StationListResponse{
+			Success: true,
+			StationList: []solarman.Station{
+				{ID: 1, Name: "Station1"},
+			},
+		},
+		devices: &solarman.DeviceListResponse{
+			Success: true,
+			DeviceListItems: []solarman.Device{
+				{DeviceSn: "SN-001"},
+			},
+		},
+		realtime: &solarman.RealtimeDataResponse{Success: true},
+	}
+	store := &mockStore{writeDeviceErr: fmt.Errorf("db write failed")}
+	tmpDir := t.TempDir()
+
+	ds := service.NewDataService(client, store, nil, tmpDir)
+	err := ds.FetchAndStore()
+
+	// error ถูก log ภายใน ไม่ propagate ออกมา
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// WriteDeviceData ต้องถูกเรียก 1 ครั้ง
+	if store.deviceCalls != 1 {
+		t.Errorf("expected 1 device write call, got %d", store.deviceCalls)
+	}
+}
+
+func TestFetchAndStore_OutputDirError(t *testing.T) {
+	// FetchAndStore: MkdirAll ล้มเหลวเมื่อ outputDir เป็น regular file → คืน error
+	tmpDir := t.TempDir()
+	blockingFile := filepath.Join(tmpDir, "notadir")
+	if err := os.WriteFile(blockingFile, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	client := &mockClient{
+		stations: &solarman.StationListResponse{Success: true},
+	}
+	ds := service.NewDataService(client, nil, nil, blockingFile)
+	err := ds.FetchAndStore()
+	if err == nil {
+		t.Error("expected error when outputDir is a regular file, got nil")
 	}
 }
