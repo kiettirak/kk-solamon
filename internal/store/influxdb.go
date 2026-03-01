@@ -8,7 +8,7 @@ import (
 
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/influxdata/influxdb-client-go/v2/api"
-	"solarman-go-client/internal/solarman"
+	"pvmon/internal/solarman"
 )
 
 // InfluxStore จัดการการเขียนข้อมูลลง InfluxDB

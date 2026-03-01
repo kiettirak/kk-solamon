@@ -23,9 +23,9 @@ import (
 	"os"
 	"time"
 
-	"solarman-go-client/internal/config"
-	"solarman-go-client/internal/store"
-	"solarman-go-client/internal/weather"
+	"pvmon/internal/config"
+	"pvmon/internal/store"
+	"pvmon/internal/weather"
 )
 
 // stationID สำหรับ KK-Home สถานีเสกา, บึงกาน (กำหนดตรง ๆ หรืออ่านจาก env)

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
-	"solarman-go-client/internal/solarman"
+	"pvmon/internal/solarman"
 )
 
 // MySQLStore จัดการการเขียนข้อมูลลง MySQL

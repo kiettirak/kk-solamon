@@ -1,4 +1,4 @@
-module solarman-go-client
+module pvmon
 
 go 1.21.0
 

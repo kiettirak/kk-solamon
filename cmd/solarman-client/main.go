@@ -2,11 +2,11 @@ package main
 
 import (
 	"log"
-	"solarman-go-client/internal/config"
-	"solarman-go-client/internal/port"
-	"solarman-go-client/internal/service"
-	"solarman-go-client/internal/solarman"
-	"solarman-go-client/internal/store"
+	"pvmon/internal/config"
+	"pvmon/internal/port"
+	"pvmon/internal/service"
+	"pvmon/internal/solarman"
+	"pvmon/internal/store"
 	"time"
 )
 

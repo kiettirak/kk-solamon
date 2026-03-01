@@ -60,7 +60,7 @@ MySQL Views (วิเคราะห์อัตโนมัติ):
 ## 2. โครงสร้างไฟล์
 
 ```
-solarman-go-client/
+pvmon/
 ├── cmd/
 │   ├── solarman-client/main.go     # service: poll Solarman ทุก N นาที
 │   ├── weather-collector/main.go   # service: ดึงสภาพอากาศ + backfill
@@ -374,8 +374,8 @@ est_panel_temp_c = อุณหภูมิอากาศ (°C) + 25°C
 
 ```bash
 # 1. Clone
-git clone https://github.com/kiettirak/solarman-go-client.git
-cd solarman-go-client
+git clone https://github.com/kiettirak/pvmon.git
+cd pvmon
 
 # 2. ตั้งค่า
 cp .env.example .env
@@ -590,8 +590,8 @@ curl -fsSL https://get.docker.com | sh
 usermod -aG docker $USER
 
 # 2. Clone code
-git clone https://github.com/kiettirak/solarman-go-client.git
-cd solarman-go-client
+git clone https://github.com/kiettirak/pvmon.git
+cd pvmon
 
 # 3. สร้าง .env.prod
 cp .env.example .env.prod

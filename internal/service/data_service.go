@@ -6,8 +6,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"solarman-go-client/internal/port"
-	"solarman-go-client/internal/solarman"
+	"pvmon/internal/port"
+	"pvmon/internal/solarman"
 	"time"
 )
 

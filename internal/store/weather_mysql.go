@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"solarman-go-client/internal/weather"
+	"pvmon/internal/weather"
 )
 
 // WriteWeatherPoint เขียน 1 ชั่วโมง weather เข้า MySQL (UPSERT)
