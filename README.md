@@ -1,6 +1,6 @@
-# ☀️ Solarman Go Client
+# ☀️ kk-solamon
 
-ระบบเก็บข้อมูลโซลาร์เซลล์อัตโนมัติจาก **Solarman API** พร้อมระบบตรวจจับความผิดปกติของแผงโดยเปรียบเทียบกับข้อมูลสภาพอากาศจาก **Open-Meteo**
+ระบบเก็บข้อมูลโซลาร์เซลล์อัตโนมัติจาก **Solarman API** พร้อมระบบตรวจจับความผิดปกติของแผงโดยเปรียบเทียบกับข้อมูลสภาพอากาศ (แสง, เมฆ, อุณหภูมิ, ฝน, ฝุ่น PM2.5/PM10) จาก **Open-Meteo**
 
 > **สถานี:** KK-Home | **ที่ตั้ง:** เสกา, บึงกาฬ (lat 17.9305°N, lon 103.9486°E) | **กำลังผลิต:** 5,750 W
 
@@ -63,15 +63,16 @@ MySQL Views (วิเคราะห์อัตโนมัติ):
 kk-solamon/
 ├── cmd/
 │   ├── solarman-client/main.go     # service: poll Solarman ทุก N นาที
-│   ├── weather-collector/main.go   # service: ดึงสภาพอากาศ + backfill
-│   └── backfill/main.go            # one-shot: ดึงข้อมูลโซลาร์ย้อนหลัง
+│   ├── weather-collector/main.go   # service: ดึงสภาพอากาศ (ERA5+ECMWF+AQ) + backfill
+│   ├── backfill/main.go            # one-shot: ดึงข้อมูลโซลาร์ย้อนหลัง
+│   └── pm-backfill/main.go         # one-shot: เติม PM2.5/PM10 ย้อนหลัง
 │
 ├── internal/
 │   ├── config/config.go            # อ่าน env vars
 │   ├── port/interfaces.go          # interfaces สำหรับ testability
 │   ├── service/
 │   │   ├── data_service.go         # business logic หลัก
-│   │   └── data_service_test.go    # unit tests (5/5 PASS)
+│   │   └── data_service_test.go    # unit tests (8/8 PASS, 92.3% coverage)
 │   ├── solarman/
 │   │   ├── auth.go                 # OAuth token management
 │   │   ├── client.go               # Solarman HTTP client
@@ -80,15 +81,15 @@ kk-solamon/
 │   ├── store/
 │   │   ├── influxdb.go             # InfluxDB writer
 │   │   ├── mysql.go                # MySQL UPSERT + API request log
-│   │   └── weather_mysql.go        # weather UPSERT + batch write
+│   │   └── weather_mysql.go        # weather UPSERT + batch write + PM update
 │   └── weather/
-│       ├── client.go               # Open-Meteo HTTP client
-│       └── models.go               # weather structs + WMO code map
+│       ├── client.go               # Open-Meteo + Air Quality HTTP client
+│       └── models.go               # weather structs (incl. PM2.5/PM10)
 │
 ├── mysql/
 │   ├── init.sql                    # tables: solar_history, api_request_log
 │   ├── views.sql                   # views: solar_daily/hourly/monthly/latest/compare
-│   └── weather.sql                 # weather_history + anomaly views
+│   └── weather.sql                 # weather_history (ผลิต, ฝน, PM2.5/PM10) + anomaly views
 │
 ├── grafana/provisioning/
 │   └── datasources/
@@ -437,13 +438,41 @@ Startup:
   1. ตรวจ weather_history: ล่าสุดถึงวันไหน?
   2. ถ้าขาด → Backfill ทีละ 30 วัน จาก ERA5-Land ย้อนหลัง
      (ดึงช้าๆ 200ms delay เพื่อไม่ spam Open-Meteo)
-  3. บันทึก weather_history (batch UPSERT)
+  3. บันทึก weather_history (batch UPSERT) รวม PM2.5/PM10
 
 Loop ทุก POLL_MINUTES:
-  4. FetchForecast(past_days=1) → ดึงข้อมูลวันนี้ + เมื่อวาน
-  5. Filter เฉพาะชั่วโมงที่ไม่เกิน "ตอนนี้"
-  6. WriteWeatherBatch → UPSERT ลง MySQL
+  4. FetchForecast(past_days=1) → ดึงสภาพอากาศวันนี้ + เมื่อวาน (ERA5+IFS)
+  5. FetchPM(past_days=1) → ดึง PM2.5/PM10 จาก Open-Meteo AQ API (CAMS)
+  6. Filter เฉพาะชั่วโมงที่ไม่เกิน "ตอนนี้"
+  7. WriteWeatherBatch → UPSERT ลง MySQL (รวม pm25_ugm3, pm10_ugm3)
 ```
+
+### 6.4 pm-backfill — เติม PM2.5/PM10 ย้อนหลัง
+
+ใช้เมื่อมีข้อมูล `weather_history` ที่ยังไม่มี PM data (column เป็น NULL) เช่น กรณีเพิ่ง migrate schema
+
+```bash
+# Run ด้วย Go โดยตรง
+MYSQL_DSN="solar:solar1234@tcp(localhost:3306)/solardata?charset=utf8mb4" \
+WEATHER_LAT=17.93046324892076 \
+WEATHER_LON=103.94864700242748 \
+go run ./cmd/pm-backfill
+
+# หรือ build แล้ว run
+go build -o pm-backfill ./cmd/pm-backfill
+./pm-backfill
+```
+
+**Flow การทำงาน:**
+```
+1. Query earliest/latest observed_at ที่ pm25_ugm3 IS NULL
+2. ถ้าไม่มี NULL → จบทันที ✅
+3. ดึง PM จาก Open-Meteo AQ API ทีละ 30 วัน
+4. UPDATE weather_history SET pm25_ugm3/pm10_ugm3 WHERE station_id + observed_at
+5. Log จำนวน rows ที่อัปเดตต่อ chunk
+```
+
+> ปลอดภัย: เป็น UPDATE ล้วน ไม่ INSERT ใหม่ / ไม่ลบข้อมูลเดิม
 
 ### 6.3 backfill — ดึงโซลาร์ย้อนหลัง
 
@@ -476,9 +505,25 @@ go test -v ./internal/service/...
 
 # coverage report
 go test -coverprofile=coverage.out ./... && go tool cover -html=coverage.out
+
+# coverage ต่อ function
+go test "-coverprofile=coverage.out" "-covermode=atomic" kk-solamon/internal/service
+go tool cover "-func=coverage.out"
 ```
 
-**Tests ที่มี (5/5 PASS):**
+**ผลปัจจุบัน: 8/8 PASS, coverage 92.3%**
+
+| Function | Coverage |
+|---|---|
+| `NewDataService` | 100% |
+| `FetchAndStore` | 100% |
+| `processStation` | 90.9% |
+| `fetchStations` | 90.0% |
+| `processDevice` | 100% |
+| `log` | 100% |
+| `saveJSON` | 75.0% |
+
+**Tests ที่มี (8/8 PASS):**
 
 | Test | ทดสอบสถานการณ์ |
 |---|---|
@@ -487,6 +532,9 @@ go test -coverprofile=coverage.out ./... && go tool cover -html=coverage.out
 | `TestFetchAndStore_DeviceListError` | device API ล้มเหลว → สถานีอื่นยังทำงานต่อ |
 | `TestFetchAndStore_NilStoreAndLogger` | store = nil → ระบบไม่ crash |
 | `TestFetchAndStore_SavesJSONFile` | ตรวจว่าไฟล์ JSON ถูกสร้างและมีข้อมูล |
+| `TestFetchAndStore_RealtimeError` | `GetDeviceRealtime` error → early return, 0 store calls |
+| `TestFetchAndStore_WriteDeviceDataError` | `WriteDeviceData` error → log warning, ไม่ panic |
+| `TestFetchAndStore_OutputDirError` | outputDir เป็น file → `MkdirAll` fail → return error |
 
 **Architecture สำหรับ Testability:**
 
@@ -553,7 +601,20 @@ docker run --rm -v "$(pwd):/app" python:3.11-slim \
 |---|---|---|
 | `solar_history` | 26 | ข้อมูล power/energy ทุก 5 นาที จาก Solarman |
 | `api_request_log` | 7 | log การเรียก API ทุกครั้ง (success + error) |
-| `weather_history` | 16 | สภาพอากาศรายชั่วโมง จาก Open-Meteo ERA5-Land |
+| `weather_history` | 18 | สภาพอากาศรายชั่วโมง จาก Open-Meteo ERA5-Land + AQ API |
+
+**weather_history สำคัญ:**
+
+| column | หน่วย | คำอธิบาย |
+|---|---|---|
+| `ghi_wm2` | W/m² | แสงอาทิตย์รวม (Global Horizontal Irradiance) |
+| `temperature_c` | °C | อุณหภูมิอากาศ 2m |
+| `precipitation_mm` | mm | ปริมาณฝนต่อชั่วโมง |
+| `pm25_ugm3` | µg/m³ | ฝุ่น PM2.5 < 2.5 µm (CAMS reanalysis/forecast) |
+| `pm10_ugm3` | µg/m³ | ฝุ่น PM10 < 10 µm (CAMS reanalysis/forecast) |
+| `cloud_cover_pct` | % | เมฆปกคลุมทั้งหมด |
+| `weather_code` | WMO | 0=แดดจัด, 61-65=ฝน, 80-82=ฝนหนัก, 95=ฟ้า |
+| `source` | | `era5` (reanalysis) หรือ `forecast` (IFS) |
 
 ### Views
 
@@ -627,7 +688,7 @@ docker compose -f docker-compose.prod.yml up -d --build solar_app weather_collec
 
 ```
 Stage 1: Builder (golang:1.23-alpine)
-  - Build ทุก binary พร้อมกัน: solarman-client, weather-collector, backfill
+  - Build ทุก binary พร้อมกัน: solarman-client, weather-collector, backfill, pm-backfill
 
 Stage 2: Runtime (alpine:3.20)
   - Copy เฉพาะ binary (ไม่มี Go toolchain)
