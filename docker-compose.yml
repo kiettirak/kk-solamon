@@ -48,6 +48,29 @@ services:
       - ./mysql/weather.sql:/docker-entrypoint-initdb.d/weather.sql
     restart: unless-stopped
 
+  weather_collector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: weather_collector
+    command: ["./weather-collector"]
+    environment:
+      MYSQL_DSN: "solar:solar1234@tcp(mysql:3306)/solardata?parseTime=true&loc=Asia%2FBangkok"
+      WEATHER_LAT: "17.93046324892076"
+      WEATHER_LON: "103.94864700242748"
+      WEATHER_START_DATE: "2023-05-23"
+      WEATHER_BACKFILL: "true"
+      POLL_MINUTES: "10"
+      # dummy values — weather-collector ไม่ใช้ แต่ config.LoadConfig() ต้องการ
+      API_ID: "dummy"
+      API_SECRET: "dummy"
+      EMAIL: "dummy@dummy.com"
+      PASSWORD: "dummy"
+      INFLUX_TOKEN: "dummy"
+    depends_on:
+      - mysql
+    restart: unless-stopped
+
 volumes:
   influxdb_data:
   grafana_data:
