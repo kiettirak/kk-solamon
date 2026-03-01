@@ -22,8 +22,9 @@ INSERT INTO weather_history (
     ghi_wm2, direct_rad_wm2, diffuse_rad_wm2,
     cloud_cover_pct, cloud_low_pct, cloud_mid_pct, cloud_high_pct,
     weather_code, weather_desc,
-    temperature_c, precipitation_mm, source
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    temperature_c, precipitation_mm,
+    pm25_ugm3, pm10_ugm3, source
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     ghi_wm2          = VALUES(ghi_wm2),
     direct_rad_wm2   = VALUES(direct_rad_wm2),
@@ -36,6 +37,8 @@ ON DUPLICATE KEY UPDATE
     weather_desc     = VALUES(weather_desc),
     temperature_c    = VALUES(temperature_c),
     precipitation_mm = VALUES(precipitation_mm),
+    pm25_ugm3        = VALUES(pm25_ugm3),
+    pm10_ugm3        = VALUES(pm10_ugm3),
     source           = IF(source = 'era5', 'era5', VALUES(source)),
     fetched_at       = CURRENT_TIMESTAMP`
 
@@ -44,7 +47,8 @@ ON DUPLICATE KEY UPDATE
 		w.GHIWm2, w.DirectRadWm2, w.DiffuseRadWm2,
 		w.CloudCoverPct, w.CloudLowPct, w.CloudMidPct, w.CloudHighPct,
 		w.WeatherCode, w.WeatherDesc,
-		w.TemperatureC, w.PrecipitationMm, src,
+		w.TemperatureC, w.PrecipitationMm,
+		w.PM25ugm3, w.PM10ugm3, src,
 	)
 	return err
 }
@@ -70,8 +74,9 @@ INSERT INTO weather_history (
     station_id, observed_at, latitude, longitude,
     ghi_wm2, direct_rad_wm2, diffuse_rad_wm2,
     cloud_cover_pct, cloud_low_pct, cloud_mid_pct, cloud_high_pct,
-    weather_code, weather_desc, temperature_c, precipitation_mm, source
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    weather_code, weather_desc, temperature_c, precipitation_mm,
+    pm25_ugm3, pm10_ugm3, source
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     ghi_wm2          = VALUES(ghi_wm2),
     direct_rad_wm2   = VALUES(direct_rad_wm2),
@@ -84,6 +89,8 @@ ON DUPLICATE KEY UPDATE
     weather_desc     = VALUES(weather_desc),
     temperature_c    = VALUES(temperature_c),
     precipitation_mm = VALUES(precipitation_mm),
+    pm25_ugm3        = VALUES(pm25_ugm3),
+    pm10_ugm3        = VALUES(pm10_ugm3),
     source           = IF(source = 'era5', 'era5', VALUES(source)),
     fetched_at       = CURRENT_TIMESTAMP`)
 	if err != nil {
@@ -102,7 +109,8 @@ ON DUPLICATE KEY UPDATE
 			w.GHIWm2, w.DirectRadWm2, w.DiffuseRadWm2,
 			w.CloudCoverPct, w.CloudLowPct, w.CloudMidPct, w.CloudHighPct,
 			w.WeatherCode, w.WeatherDesc,
-			w.TemperatureC, w.PrecipitationMm, src,
+			w.TemperatureC, w.PrecipitationMm,
+			w.PM25ugm3, w.PM10ugm3, src,
 		)
 		if err != nil {
 			return count, fmt.Errorf("weather insert %s: %w", w.ObservedAt, err)

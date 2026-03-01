@@ -3,19 +3,22 @@ package weather
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"time"
 )
 
 const (
-	forecastBaseURL = "https://api.open-meteo.com/v1/forecast"
-	archiveBaseURL  = "https://archive-api.open-meteo.com/v1/archive"
+	forecastBaseURL    = "https://api.open-meteo.com/v1/forecast"
+	archiveBaseURL     = "https://archive-api.open-meteo.com/v1/archive"
+	airQualityBaseURL  = "https://air-quality-api.open-meteo.com/v1/air-quality"
 
 	// ตัวแปรที่ดึง — solar radiation + cloud + ambient
-	hourlyVars = "shortwave_radiation,direct_radiation,diffuse_radiation," +
+	hourlyVars    = "shortwave_radiation,direct_radiation,diffuse_radiation," +
 		"cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high," +
 		"temperature_2m,precipitation,weather_code"
+	airQualityVars = "pm10,pm2_5"
 )
 
 // Client ดึงข้อมูลสภาพอากาศจาก Open-Meteo API (ฟรี, ไม่ต้อง API key)
@@ -38,18 +41,35 @@ func NewClient(lat, lon float64) *Client {
 // Source จะถูก tag เป็น "forecast" (ECMWF IFS model)
 func (c *Client) FetchForecast(pastDays int) ([]HourlyWeather, error) {
 	params := url.Values{
-		"latitude":   {fmt.Sprintf("%.4f", c.Latitude)},
-		"longitude":  {fmt.Sprintf("%.4f", c.Longitude)},
-		"hourly":     {hourlyVars},
-		"timezone":   {"Asia/Bangkok"},
-		"past_days":  {fmt.Sprintf("%d", pastDays)},
+		"latitude":  {fmt.Sprintf("%.4f", c.Latitude)},
+		"longitude": {fmt.Sprintf("%.4f", c.Longitude)},
+		"hourly":    {hourlyVars},
+		"timezone":  {"Asia/Bangkok"},
+		"past_days": {fmt.Sprintf("%d", pastDays)},
 	}
 	records, err := c.fetch(forecastBaseURL + "?" + params.Encode())
 	if err != nil {
 		return nil, err
 	}
+
+	// ดึง PM2.5 / PM10 จาก Air Quality API แล้ว merge
+	pmParams := url.Values{
+		"latitude":  {fmt.Sprintf("%.4f", c.Latitude)},
+		"longitude": {fmt.Sprintf("%.4f", c.Longitude)},
+		"timezone":  {"Asia/Bangkok"},
+		"past_days": {fmt.Sprintf("%d", pastDays)},
+	}
+	pmMap, pmErr := c.fetchPM(pmParams)
+	if pmErr != nil {
+		log.Printf("[weather] AQ forecast warning (PM data skipped): %v", pmErr)
+	}
+
 	for i := range records {
 		records[i].Source = "forecast"
+		if pm, ok := pmMap[records[i].ObservedAt]; ok {
+			records[i].PM25ugm3 = pm[0]
+			records[i].PM10ugm3 = pm[1]
+		}
 	}
 	return records, nil
 }
@@ -69,10 +89,60 @@ func (c *Client) FetchHistorical(startDate, endDate string) ([]HourlyWeather, er
 	if err != nil {
 		return nil, err
 	}
+
+	// ดึง PM2.5 / PM10 จาก Air Quality API แล้ว merge
+	// หมายเหตุ: CAMS reanalysis ย้อนหลังได้ตั้งแต่ 2022-07-29 เป็นต้นไป
+	pmParams := url.Values{
+		"latitude":   {fmt.Sprintf("%.4f", c.Latitude)},
+		"longitude":  {fmt.Sprintf("%.4f", c.Longitude)},
+		"timezone":   {"Asia/Bangkok"},
+		"start_date": {startDate},
+		"end_date":   {endDate},
+	}
+	pmMap, pmErr := c.fetchPM(pmParams)
+	if pmErr != nil {
+		log.Printf("[weather] AQ historical warning (PM data skipped): %v", pmErr)
+	}
+
 	for i := range records {
 		records[i].Source = "era5"
+		if pm, ok := pmMap[records[i].ObservedAt]; ok {
+			records[i].PM25ugm3 = pm[0]
+			records[i].PM10ugm3 = pm[1]
+		}
 	}
 	return records, nil
+}
+
+// fetchPM ดึง PM2.5/PM10 จาก Open-Meteo Air Quality API
+// คืน map[observedAt] → [pm25, pm10]
+func (c *Client) fetchPM(params url.Values) (map[string][2]float64, error) {
+	params.Set("hourly", airQualityVars)
+	resp, err := c.httpClient.Get(airQualityBaseURL + "?" + params.Encode())
+	if err != nil {
+		return nil, fmt.Errorf("air-quality request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("air-quality HTTP %d", resp.StatusCode)
+	}
+
+	var aqr AirQualityResponse
+	if err := json.NewDecoder(resp.Body).Decode(&aqr); err != nil {
+		return nil, fmt.Errorf("air-quality decode: %w", err)
+	}
+
+	// build map: "2023-05-23 08:00:00" → [pm25, pm10]
+	pmMap := make(map[string][2]float64, len(aqr.Hourly.Time))
+	for i, ts := range aqr.Hourly.Time {
+		if len(ts) < 16 {
+			continue
+		}
+		key := ts[:10] + " " + ts[11:16] + ":00"
+		pmMap[key] = [2]float64{safeF(aqr.Hourly.PM25, i), safeF(aqr.Hourly.PM10, i)}
+	}
+	return pmMap, nil
 }
 
 func (c *Client) fetch(rawURL string) ([]HourlyWeather, error) {

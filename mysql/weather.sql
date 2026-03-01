@@ -29,6 +29,10 @@ CREATE TABLE IF NOT EXISTS weather_history (
     temperature_c    DOUBLE        DEFAULT 0                 COMMENT 'อุณหภูมิอากาศ 2m (°C) — ส่งผลต่อประสิทธิภาพแผง',
     precipitation_mm DOUBLE        DEFAULT 0                 COMMENT 'ปริมาณฝนชั่วโมงนั้น (mm)',
 
+    -- Air Quality (CAMS reanalysis/forecast ผ่าน Open-Meteo AQ API)
+    pm25_ugm3        DOUBLE        DEFAULT NULL              COMMENT 'PM2.5 ฝุ่นละออง < 2.5 µm (µg/m³) | NULL = ยังไม่มีข้อมูล',
+    pm10_ugm3        DOUBLE        DEFAULT NULL              COMMENT 'PM10  ฝุ่นละออง < 10 µm  (µg/m³) | NULL = ยังไม่มีข้อมูล',
+
     source           VARCHAR(20)   DEFAULT 'open-meteo'      COMMENT 'แหล่งข้อมูล',
     fetched_at       DATETIME      DEFAULT CURRENT_TIMESTAMP COMMENT 'เวลาที่ดึงข้อมูล',
 

@@ -25,6 +25,15 @@ var WMODesc = map[int]string{
 	99: "Thunderstorm + heavy hail",
 }
 
+// AirQualityResponse — JSON response จาก Open-Meteo Air Quality API
+type AirQualityResponse struct {
+	Hourly struct {
+		Time []string  `json:"time"`
+		PM25 []float64 `json:"pm2_5"`
+		PM10 []float64 `json:"pm10"`
+	} `json:"hourly"`
+}
+
 // OpenMeteoResponse — JSON response จาก Open-Meteo API (forecast + archive)
 type OpenMeteoResponse struct {
 	Latitude  float64 `json:"latitude"`
@@ -62,6 +71,10 @@ type HourlyWeather struct {
 	WeatherDesc    string
 	TemperatureC   float64
 	PrecipitationMm float64
+	// Air Quality จาก Open-Meteo Air Quality API (CAMS model)
+	PM25ugm3    float64 // PM2.5 ฝุ่นละออง < 2.5 µm (µg/m³)
+	PM10ugm3    float64 // PM10  ฝุ่นละออง < 10 µm  (µg/m³)
+
 	// Source ระบุแหล่งที่มาของข้อมูล:
 	//   "era5"     = ERA5-Land archive (reanalysis, แม่นยำสูง, delay ~5 วัน)
 	//   "forecast" = ECMWF IFS forecast (พยากรณ์, ใช้สำหรับ real-time)
