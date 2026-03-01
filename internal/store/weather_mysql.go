@@ -10,15 +10,20 @@ import (
 
 // WriteWeatherPoint เขียน 1 ชั่วโมง weather เข้า MySQL (UPSERT)
 // ถ้า station_id + observed_at ซ้ำ → update ข้อมูลใหม่ทับ
+// หาก source เดิมเป็น "era5" แต่ใหม่เป็น "forecast" → ไม่ทับ source (era5 ดีกว่า)
 func (s *MySQLStore) WriteWeatherPoint(stationID int64, w weather.HourlyWeather) error {
+	src := w.Source
+	if src == "" {
+		src = "open-meteo"
+	}
 	query := `
 INSERT INTO weather_history (
     station_id, observed_at, latitude, longitude,
     ghi_wm2, direct_rad_wm2, diffuse_rad_wm2,
     cloud_cover_pct, cloud_low_pct, cloud_mid_pct, cloud_high_pct,
     weather_code, weather_desc,
-    temperature_c, precipitation_mm
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    temperature_c, precipitation_mm, source
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     ghi_wm2          = VALUES(ghi_wm2),
     direct_rad_wm2   = VALUES(direct_rad_wm2),
@@ -31,6 +36,7 @@ ON DUPLICATE KEY UPDATE
     weather_desc     = VALUES(weather_desc),
     temperature_c    = VALUES(temperature_c),
     precipitation_mm = VALUES(precipitation_mm),
+    source           = IF(source = 'era5', 'era5', VALUES(source)),
     fetched_at       = CURRENT_TIMESTAMP`
 
 	_, err := s.db.Exec(query,
@@ -38,7 +44,7 @@ ON DUPLICATE KEY UPDATE
 		w.GHIWm2, w.DirectRadWm2, w.DiffuseRadWm2,
 		w.CloudCoverPct, w.CloudLowPct, w.CloudMidPct, w.CloudHighPct,
 		w.WeatherCode, w.WeatherDesc,
-		w.TemperatureC, w.PrecipitationMm,
+		w.TemperatureC, w.PrecipitationMm, src,
 	)
 	return err
 }
@@ -64,8 +70,8 @@ INSERT INTO weather_history (
     station_id, observed_at, latitude, longitude,
     ghi_wm2, direct_rad_wm2, diffuse_rad_wm2,
     cloud_cover_pct, cloud_low_pct, cloud_mid_pct, cloud_high_pct,
-    weather_code, weather_desc, temperature_c, precipitation_mm
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    weather_code, weather_desc, temperature_c, precipitation_mm, source
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     ghi_wm2          = VALUES(ghi_wm2),
     direct_rad_wm2   = VALUES(direct_rad_wm2),
@@ -78,6 +84,7 @@ ON DUPLICATE KEY UPDATE
     weather_desc     = VALUES(weather_desc),
     temperature_c    = VALUES(temperature_c),
     precipitation_mm = VALUES(precipitation_mm),
+    source           = IF(source = 'era5', 'era5', VALUES(source)),
     fetched_at       = CURRENT_TIMESTAMP`)
 	if err != nil {
 		return 0, fmt.Errorf("weather batch prepare: %w", err)
@@ -86,12 +93,16 @@ ON DUPLICATE KEY UPDATE
 
 	count := 0
 	for _, w := range records {
+		src := w.Source
+		if src == "" {
+			src = "open-meteo"
+		}
 		_, err = stmt.Exec(
 			stationID, w.ObservedAt, w.Latitude, w.Longitude,
 			w.GHIWm2, w.DirectRadWm2, w.DiffuseRadWm2,
 			w.CloudCoverPct, w.CloudLowPct, w.CloudMidPct, w.CloudHighPct,
 			w.WeatherCode, w.WeatherDesc,
-			w.TemperatureC, w.PrecipitationMm,
+			w.TemperatureC, w.PrecipitationMm, src,
 		)
 		if err != nil {
 			return count, fmt.Errorf("weather insert %s: %w", w.ObservedAt, err)
@@ -104,10 +115,12 @@ ON DUPLICATE KEY UPDATE
 }
 
 // LatestWeatherDate คืน date ล่าสุดที่มีข้อมูล weather (สำหรับ backfill gap detection)
+// ใช้ DATE_FORMAT เพื่อบังคับให้ MySQL ส่งกลับเป็น string "YYYY-MM-DD"
+// (หลีกเลี่ยงปัญหา parseTime=true ใน DSN ที่ทำให้ Go แปลง DATE เป็น time.Time)
 func (s *MySQLStore) LatestWeatherDate(stationID int64) (string, error) {
 	var d sql.NullString
 	err := s.db.QueryRow(
-		`SELECT DATE(MAX(observed_at)) FROM weather_history WHERE station_id = ?`,
+		`SELECT DATE_FORMAT(MAX(observed_at), '%Y-%m-%d') FROM weather_history WHERE station_id = ?`,
 		stationID,
 	).Scan(&d)
 	if err != nil {

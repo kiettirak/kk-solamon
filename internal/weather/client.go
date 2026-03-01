@@ -35,6 +35,7 @@ func NewClient(lat, lon float64) *Client {
 
 // FetchForecast ดึงข้อมูลพยากรณ์ + ย้อนหลัง pastDays วัน
 // ใช้สำหรับ polling ปกติ (ดึงทุก POLL_MINUTES)
+// Source จะถูก tag เป็น "forecast" (ECMWF IFS model)
 func (c *Client) FetchForecast(pastDays int) ([]HourlyWeather, error) {
 	params := url.Values{
 		"latitude":   {fmt.Sprintf("%.4f", c.Latitude)},
@@ -43,11 +44,18 @@ func (c *Client) FetchForecast(pastDays int) ([]HourlyWeather, error) {
 		"timezone":   {"Asia/Bangkok"},
 		"past_days":  {fmt.Sprintf("%d", pastDays)},
 	}
-	return c.fetch(forecastBaseURL + "?" + params.Encode())
+	records, err := c.fetch(forecastBaseURL + "?" + params.Encode())
+	if err != nil {
+		return nil, err
+	}
+	for i := range records {
+		records[i].Source = "forecast"
+	}
+	return records, nil
 }
 
 // FetchHistorical ดึงข้อมูลย้อนหลัง (ERA5-Land, hourly, ตั้งแต่ 1950)
-// ใช้สำหรับ backfill
+// ใช้สำหรับ backfill — Source จะถูก tag เป็น "era5" (reanalysis, แม่นยำสูง)
 func (c *Client) FetchHistorical(startDate, endDate string) ([]HourlyWeather, error) {
 	params := url.Values{
 		"latitude":   {fmt.Sprintf("%.4f", c.Latitude)},
@@ -57,7 +65,14 @@ func (c *Client) FetchHistorical(startDate, endDate string) ([]HourlyWeather, er
 		"start_date": {startDate},
 		"end_date":   {endDate},
 	}
-	return c.fetch(archiveBaseURL + "?" + params.Encode())
+	records, err := c.fetch(archiveBaseURL + "?" + params.Encode())
+	if err != nil {
+		return nil, err
+	}
+	for i := range records {
+		records[i].Source = "era5"
+	}
+	return records, nil
 }
 
 func (c *Client) fetch(rawURL string) ([]HourlyWeather, error) {

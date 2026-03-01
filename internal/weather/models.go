@@ -62,4 +62,9 @@ type HourlyWeather struct {
 	WeatherDesc    string
 	TemperatureC   float64
 	PrecipitationMm float64
+	// Source ระบุแหล่งที่มาของข้อมูล:
+	//   "era5"     = ERA5-Land archive (reanalysis, แม่นยำสูง, delay ~5 วัน)
+	//   "forecast" = ECMWF IFS forecast (พยากรณ์, ใช้สำหรับ real-time)
+	// เมื่อ ERA5 พร้อม → backfill UPSERT ทับ forecast อัตโนมัติ
+	Source         string
 }
