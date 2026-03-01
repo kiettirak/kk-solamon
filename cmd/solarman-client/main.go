@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"solarman-go-client/internal/config"
+	"solarman-go-client/internal/port"
 	"solarman-go-client/internal/service"
 	"solarman-go-client/internal/solarman"
 	"solarman-go-client/internal/store"
@@ -17,23 +18,35 @@ func main() {
 	if err != nil {
 		log.Fatalf("[ผิดพลาด] โหลด config: %v", err)
 	}
-	log.Printf("[สำเร็จ] config OK - ดึงข้อมูลทุก %d วินาที", cfg.PollSeconds)
+	log.Printf("[สำเร็จ] config OK - ดึงข้อมูลทุก %d นาที", cfg.PollMinutes)
 
 	// เชื่อม InfluxDB
+	var stationStore port.StationStore
 	influx := store.NewInfluxStore(
 		cfg.InfluxURL, cfg.InfluxToken, cfg.InfluxOrg, cfg.InfluxBucket,
 	)
 	defer influx.Close()
-
-	// Ping InfluxDB
 	if err := influx.Ping(); err != nil {
 		log.Printf("[เตือน] InfluxDB ไม่พร้อม - จะบันทึกเฉพาะ JSON: %v", err)
-		influx = nil
+	} else {
+		stationStore = influx // กำหนดเฉพาะตอน ping สำเร็จ (nil interface ที่แท้จริง)
 	}
 
 	// เชื่อม Solarman
 	client := solarman.NewClient(cfg.BaseURL, cfg.APIID, cfg.APISecret, cfg.Email, cfg.Password)
-	dataService := service.NewDataService(client, influx, cfg.OutputDir)
+
+	// เชื่อม MySQL (สำหรับ log API requests)
+	var apiLogger port.APILogger
+	if cfg.MySQLDSN != "" {
+		if ms, err := store.NewMySQLStore(cfg.MySQLDSN); err != nil {
+			log.Printf("[เตือน] MySQL ไม่พร้อม - ไม่บันทึก api_request_log: %v", err)
+		} else {
+			defer ms.Close()
+			apiLogger = ms
+		}
+	}
+
+	dataService := service.NewDataService(client, stationStore, apiLogger, cfg.OutputDir)
 
 	// วนรอบแรกทันที แล้ววนซ้ำตาม interval
 	for {
@@ -41,7 +54,7 @@ func main() {
 		if err := dataService.FetchAndStore(); err != nil {
 			log.Printf("[ผิดพลาด] %v", err)
 		}
-		log.Printf("[Poll] สำเร็จ - รอ %d วินาที...", cfg.PollSeconds)
-		time.Sleep(time.Duration(cfg.PollSeconds) * time.Second)
+		log.Printf("[Poll] สำเร็จ - รอ %d นาที...", cfg.PollMinutes)
+		time.Sleep(time.Duration(cfg.PollMinutes) * time.Minute)
 	}
 }

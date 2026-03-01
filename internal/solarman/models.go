@@ -92,3 +92,48 @@ type RealtimeDataResponse struct {
 	CollectionTime int64           `json:"collectionTime"`
 	DataList       []DataAttribute `json:"dataList"`
 }
+
+// ==================== Station History ====================
+
+// StationDataPoint คือข้อมูล 1 จุดใน stationDataItems (ทุก ~5 นาที)
+type StationDataPoint struct {
+	DateTime               int64   `json:"dateTime"`               // unix timestamp (seconds)
+	Year                   int     `json:"year"`
+	Month                  int     `json:"month"`
+	Day                    int     `json:"day"`
+	// --- Power (W) ---
+	GenerationPower        float64 `json:"generationPower"`        // กำลังผลิตจากโซลาร์ (W)
+	BatteryPower           float64 `json:"batteryPower"`           // กำลังแบต (ลบ=ชาร์จ, บวก=คาย)
+	BatterySoc             float64 `json:"batterySoc"`             // ระดับแบต (%)
+	ChargePower            float64 `json:"chargePower"`            // กำลังชาร์จแบต (W)
+	DischargePower         float64 `json:"dischargePower"`         // กำลังคายแบต (W)
+	GridPower              float64 `json:"gridPower"`              // export ไปกริด (W)
+	WirePower              float64 `json:"wirePower"`              // โหลดบ้านทั้งหมด (W)
+	UsePower               float64 `json:"usePower"`               // พลังงานที่บ้านใช้ (W)
+	PurchasePower          float64 `json:"purchasePower"`          // ซื้อจากการไฟฟ้า (W)
+	// --- Energy cumulative (kWh) ---
+	GenerationValue        float64 `json:"generationValue"`        // ผลิตสะสมวันนั้น (kWh)
+	BuyValue               float64 `json:"buyValue"`               // ซื้อจากกริดสะสม (kWh)
+	UseValue               float64 `json:"useValue"`               // ใช้สะสม (kWh)
+	ChargeValue            float64 `json:"chargeValue"`            // ชาร์จแบตสะสม (kWh)
+	DischargeValue         float64 `json:"dischargeValue"`         // คายแบตสะสม (kWh)
+	GridValue              float64 `json:"gridValue"`              // export กริดสะสม (kWh)
+	// --- Performance ---
+	GenerationRatio        float64 `json:"generationRatio"`        // อัตราผลิตเทียบ capacity (%)
+	PR                     float64 `json:"pr"`                     // Performance Ratio (%)
+	CPR                    float64 `json:"cpr"`                    // Capacity Performance Ratio
+	FullPowerHours         float64 `json:"fullPowerHours"`         // ชั่วโมงผลิตเต็มกำลัง (h)
+	TheoreticalGeneration  float64 `json:"theoreticalGeneration"`  // ผลิตตามทฤษฎี (kWh)
+	// --- Solar irradiation ---
+	Irradiate              float64 `json:"irradiate"`              // รังสีสะสม (kWh/m²)
+	IrradiateIntensity     float64 `json:"irradiateIntensity"`     // ความเข้มแสง (W/m²)
+}
+
+// StationHistoryResponse คือ response จาก /station/v1.0/history
+type StationHistoryResponse struct {
+	Code             interface{}        `json:"code"`
+	Msg              interface{}        `json:"msg"`
+	Success          bool               `json:"success"`
+	Total            int                `json:"total"`
+	StationDataItems []StationDataPoint `json:"stationDataItems"`
+}

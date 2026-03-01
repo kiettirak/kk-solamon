@@ -22,10 +22,19 @@ type Config struct {
 	InfluxOrg    string
 	InfluxBucket string
 
+	// MySQL
+	MySQLDSN string
+
 	// App
 	LogLevel    string
 	OutputDir   string
-	PollSeconds int // interval ดึงข้อมูล (วินาที)
+	PollMinutes int // interval ดึงข้อมูล (นาที)
+
+	// Weather (Open-Meteo)
+	WeatherLat       float64 // latitude ของสถานี (เช่น 13.7563)
+	WeatherLon       float64 // longitude (เช่น 100.5018)
+	WeatherBackfill  bool    // true = backfill ย้อนหลังอัตโนมัติถ้ายังไม่มีข้อมูล
+	WeatherStartDate string  // วันที่เริ่ม backfill (YYYY-MM-DD)
 }
 
 func LoadConfig() (*Config, error) {
@@ -43,6 +52,7 @@ func LoadConfig() (*Config, error) {
 		InfluxToken:  os.Getenv("INFLUX_TOKEN"),
 		InfluxOrg:    os.Getenv("INFLUX_ORG"),
 		InfluxBucket: os.Getenv("INFLUX_BUCKET"),
+		MySQLDSN:     os.Getenv("MYSQL_DSN"),
 		LogLevel:     os.Getenv("LOG_LEVEL"),
 		OutputDir:    os.Getenv("OUTPUT_DIR"),
 	}
@@ -66,9 +76,34 @@ func LoadConfig() (*Config, error) {
 	if cfg.OutputDir == "" {
 		cfg.OutputDir = "./output"
 	}
-	cfg.PollSeconds = 300 // ดึงข้อมูลทุก 5 นาที
-	if v := os.Getenv("POLL_SECONDS"); v != "" {
-		fmt.Sscanf(v, "%d", &cfg.PollSeconds)
+	// Weather coordinates ค่า default = เสกา, บึงกาน
+	cfg.WeatherLat = 17.93046324892076
+	cfg.WeatherLon = 103.94864700242748
+	if v := os.Getenv("WEATHER_LAT"); v != "" {
+		fmt.Sscanf(v, "%f", &cfg.WeatherLat)
+	}
+	if v := os.Getenv("WEATHER_LON"); v != "" {
+		fmt.Sscanf(v, "%f", &cfg.WeatherLon)
+	}
+	cfg.WeatherBackfill = os.Getenv("WEATHER_BACKFILL") != "false"
+	cfg.WeatherStartDate = os.Getenv("WEATHER_START_DATE")
+	if cfg.WeatherStartDate == "" {
+		cfg.WeatherStartDate = "2023-05-23" // วันที่ติดตั้งโซลาร์
+	}
+
+	cfg.PollMinutes = 5 // ดึงข้อมูลทุก 5 นาที (default)
+	if v := os.Getenv("POLL_MINUTES"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.PollMinutes)
+	} else if v := os.Getenv("POLL_SECONDS"); v != "" {
+		// backward compat — แปลงวินาทีเป็นนาที
+		var secs int
+		fmt.Sscanf(v, "%d", &secs)
+		if secs > 0 {
+			cfg.PollMinutes = secs / 60
+			if cfg.PollMinutes < 1 {
+				cfg.PollMinutes = 1
+			}
+		}
 	}
 
 	if cfg.APIID == "" || cfg.APISecret == "" {

@@ -119,3 +119,67 @@ func (c *Client) GetDeviceRealtime(deviceSn string) (*RealtimeDataResponse, erro
 	}
 	return &result, nil
 }
+
+// postRaw ทำ POST request แล้วคืน raw JSON bytes (ไม่ decode)
+func (c *Client) postRaw(endpoint string, body map[string]any) ([]byte, error) {
+	if err := c.auth.EnsureToken(); err != nil {
+		return nil, fmt.Errorf("ไม่สามารถเชื่อมต่อได้: %w", err)
+	}
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("แปลง body เป็น JSON ไม่สำเร็จ: %w", err)
+	}
+	url := c.baseURL + endpoint + "?language=en"
+	log.Printf("[Client] POST %s", url)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("สร้าง request ไม่สำเร็จ: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.auth.AccessToken)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("ส่ง request ไม่สำเร็จ: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP error: status code %d", resp.StatusCode)
+	}
+	rawBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("อ่าน response body ไม่สำเร็จ: %w", err)
+	}
+	log.Printf("[Client] Response: %s", string(rawBody))
+	return rawBody, nil
+}
+
+// GetStationHistoryRawBody ส่งคำขอด้วย body แบบ generic (ใช้ทดสอบหลาย parameter format)
+func (c *Client) GetStationHistoryRawBody(body map[string]any) ([]byte, error) {
+	return c.postRaw(EndpointStationHistory, body)
+}
+
+// GetEndpointRaw ส่งคำขอ POST ไปยัง endpoint ใดก็ได้ และคืน raw JSON (ใช้สำหรับ debug/test)
+func (c *Client) GetEndpointRaw(endpoint string, body map[string]any) ([]byte, error) {
+	return c.postRaw(endpoint, body)
+}
+
+// GetStationHistory ดึงข้อมูลประวัติของสถานีในช่วงวันที่ที่กำหนด
+// startDate/endDate รูปแบบ "2006-01-02" (YYYY-MM-DD)
+// timeType: 1 = รายละเอียดทุก 5 นาที, 2 = สรุปรายวัน
+func (c *Client) GetStationHistory(appID string, stationID int64, startDate, endDate string, timeType int) (*StationHistoryResponse, error) {
+	var result StationHistoryResponse
+	err := c.post(EndpointStationHistory, map[string]any{
+		"appId":     appID,
+		"stationId": stationID,
+		"timeType":  timeType,
+		"startTime": startDate,
+		"endTime":   endDate,
+	}, &result)
+	if err != nil {
+		return nil, err
+	}
+	if !result.Success {
+		return nil, fmt.Errorf("API error: station history ไม่สำเร็จ")
+	}
+	return &result, nil
+}

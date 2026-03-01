@@ -1,5 +1,6 @@
 # Environment variables (ห้าม commit ไฟล์นี้)
 .env
+.env.prod
 
 # Build output
 /bin/

@@ -12,4 +12,6 @@ const (
 	EndpointDeviceList     = "/station/v1.0/device/list" // รายการอุปกรณ์ตามโรงไฟฟ้า
 	EndpointDeviceRealtime = "/device/v1.0/currentData" // ข้อมูล real-time
 	EndpointDeviceHistory  = "/device/v1.0/history"     // ข้อมูลย้อนหลัง
+	// Station history (station-level historical data)
+	EndpointStationHistory = "/station/v1.0/history"
 )

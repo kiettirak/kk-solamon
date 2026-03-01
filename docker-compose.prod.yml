@@ -1,0 +1,115 @@
+# docker-compose.prod.yml — สำหรับ deploy บน Proxmox VM
+# ใช้คำสั่ง: docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+#
+# ความแตกต่างจาก dev:
+#  - เพิ่ม solar_app service (Go polling client)
+#  - ไม่ expose port MySQL ออกนอก (ปลอดภัยกว่า)
+#  - restart: always (รัน auto หลัง reboot)
+#  - ใช้ .env.prod แยกจาก .env
+
+services:
+  influxdb:
+    image: influxdb:2.7
+    container_name: solar_influxdb
+    ports:
+      - "8086:8086"
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: admin
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUX_ADMIN_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUX_ORG}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUX_BUCKET}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUX_TOKEN}
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+    networks:
+      - solar_net
+    restart: always
+
+  mysql:
+    image: mysql:8.0
+    container_name: solar_mysql
+    # ไม่ expose port 3306 ออกนอก — เข้าถึงได้เฉพาะ internal network
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: solardata
+      MYSQL_USER: solar
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./mysql/views.sql:/docker-entrypoint-initdb.d/views.sql
+      - ./mysql/weather.sql:/docker-entrypoint-initdb.d/weather.sql
+    networks:
+      - solar_net
+    restart: always
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: solar_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+      GF_INSTALL_PLUGINS: grafana-clock-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - influxdb
+      - mysql
+    networks:
+      - solar_net
+    restart: always
+
+  # Go polling client — ดึงข้อมูลจาก Solarman ทุก N นาที
+  solar_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: solar_app
+    env_file:
+      - .env.prod
+    environment:
+      # override DSN ให้ชี้ไป container name แทน localhost
+      INFLUX_URL: http://influxdb:8086
+      MYSQL_DSN: "solar:${MYSQL_PASSWORD}@tcp(mysql:3306)/solardata?parseTime=true&loc=Asia%2FBangkok"
+    volumes:
+      - ./output:/app/output
+    depends_on:
+      - influxdb
+      - mysql
+    networks:
+      - solar_net
+    restart: always
+
+  # Weather collector — ดึงสภาพอากาศจาก Open-Meteo ทุก N นาที + backfill อัตโนมัติ
+  weather_collector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: weather_collector
+    command: ["./weather-collector"]
+    env_file:
+      - .env.prod
+    environment:
+      MYSQL_DSN: "solar:${MYSQL_PASSWORD}@tcp(mysql:3306)/solardata?parseTime=true&loc=Asia%2FBangkok"
+      WEATHER_LAT: ${WEATHER_LAT:-13.7563}
+      WEATHER_LON: ${WEATHER_LON:-100.5018}
+      WEATHER_START_DATE: ${WEATHER_START_DATE:-2023-05-23}
+      WEATHER_BACKFILL: "true"
+    depends_on:
+      - mysql
+    networks:
+      - solar_net
+    restart: always
+
+networks:
+  solar_net:
+    driver: bridge
+
+volumes:
+  influxdb_data:
+  grafana_data:
+  mysql_data:

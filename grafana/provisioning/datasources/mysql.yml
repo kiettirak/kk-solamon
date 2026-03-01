@@ -1,0 +1,17 @@
+apiVersion: 1
+
+datasources:
+  - name: MySQL
+    type: mysql
+    url: solar_mysql:3306
+    database: solardata
+    user: solar
+    jsonData:
+      maxOpenConns: 5
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+      timezone: Asia/Bangkok
+    secureJsonData:
+      password: solar1234
+    isDefault: false
+    editable: true

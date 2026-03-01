@@ -40,11 +40,6 @@ func (s *InfluxStore) Close() {
 }
 
 // WriteStation บันทึกข้อมูลโรงไฟฟ้าลง InfluxDB
-// ใน InfluxDB ข้อมูลแบ่งเป็น:
-//   - measurement = ชื่อ "ตาราง"
-//   - tags = index (string, ค้นหาเร็ว)
-//   - fields = ค่าที่วัดได้ (number/string)
-//   - timestamp = เวลา
 func (s *InfluxStore) WriteStation(station solarman.Station) error {
 	// สร้าง data point
 	p := influxdb2.NewPointWithMeasurement("solar_station").
@@ -60,6 +55,45 @@ func (s *InfluxStore) WriteStation(station solarman.Station) error {
 	}
 
 	log.Printf("[InfluxDB] บันทึก station: %s (power=%.2fW)", station.Name, station.GenerationPower)
+	return nil
+}
+
+// WriteStationHistoryPoint บันทึก 1 data point จาก station history ลง InfluxDB
+// ใช้ timestamp จาก dateTime ของ datapoint (ไม่ใช่ time.Now()) เพื่อให้ข้อมูลย้อนหลังถูกต้อง
+func (s *InfluxStore) WriteStationHistoryPoint(stationID int64, stationName string, pt solarman.StationDataPoint) error {
+	p := influxdb2.NewPointWithMeasurement("solar_station").
+		AddTag("station_id", fmt.Sprintf("%d", stationID)).
+		AddTag("station_name", stationName).
+		// Power (W)
+		AddField("generation_power", pt.GenerationPower).
+		AddField("battery_power", pt.BatteryPower).
+		AddField("battery_soc", pt.BatterySoc).
+		AddField("charge_power", pt.ChargePower).
+		AddField("discharge_power", pt.DischargePower).
+		AddField("grid_power", pt.GridPower).
+		AddField("wire_power", pt.WirePower).
+		AddField("use_power", pt.UsePower).
+		AddField("purchase_power", pt.PurchasePower).
+		// Energy cumulative (kWh)
+		AddField("generation_value", pt.GenerationValue).
+		AddField("buy_value", pt.BuyValue).
+		AddField("use_value", pt.UseValue).
+		AddField("charge_value", pt.ChargeValue).
+		AddField("discharge_value", pt.DischargeValue).
+		AddField("grid_value", pt.GridValue).
+		// Performance
+		AddField("generation_ratio", pt.GenerationRatio).
+		AddField("pr", pt.PR).
+		AddField("cpr", pt.CPR).
+		AddField("full_power_hours", pt.FullPowerHours).
+		AddField("theoretical_generation", pt.TheoreticalGeneration).
+		// Irradiation
+		AddField("irradiate", pt.Irradiate).
+		AddField("irradiate_intensity", pt.IrradiateIntensity).
+		SetTime(time.Unix(pt.DateTime, 0))
+	if err := s.writeAPI.WritePoint(context.Background(), p); err != nil {
+		return fmt.Errorf("เขียน history point ไม่สำเร็จ: %w", err)
+	}
 	return nil
 }
 

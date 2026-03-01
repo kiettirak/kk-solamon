@@ -31,6 +31,24 @@ services:
       - influxdb
     restart: unless-stopped
 
+  mysql:
+    image: mysql:8.0
+    container_name: solar_mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: solar1234
+      MYSQL_DATABASE: solardata
+      MYSQL_USER: solar
+      MYSQL_PASSWORD: solar1234
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./mysql/views.sql:/docker-entrypoint-initdb.d/views.sql
+      - ./mysql/weather.sql:/docker-entrypoint-initdb.d/weather.sql
+    restart: unless-stopped
+
 volumes:
   influxdb_data:
   grafana_data:
+  mysql_data:
