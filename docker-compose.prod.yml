@@ -7,6 +7,8 @@
 #  - restart: always (รัน auto หลัง reboot)
 #  - ใช้ .env.prod แยกจาก .env
 
+name: kk-solamon
+
 services:
   influxdb:
     image: influxdb:2.7
